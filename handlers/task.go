@@ -1,10 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type RequestData struct {
@@ -17,7 +22,9 @@ type Task struct {
 	TaskDescription string
 }
 
-var tasks []Task
+// var tasks []Task
+
+var ctx = context.Background()
 
 func TaskHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -38,9 +45,39 @@ func TaskHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		tasks = append(tasks, Task{TaskName: data.TaskName, TaskDescription: data.TaskDescription})
+		if data.TaskName == "" || data.TaskDescription == "" {
+			http.Error(w, "Need to have both description and name at least", http.StatusBadRequest)
+			return
+		}
 
-		fmt.Fprintf(w, "currently we have: %d tasks", len(tasks))
+		rdb := redis.NewClient(&redis.Options{
+			Addr:     "localhost:6379",
+			Password: "", // no password set
+			DB:       0,  // use default DB
+		})
+
+		t := time.Now()
+		keySet := "simpletask:" + strconv.FormatInt(t.UnixMilli(), 10)
+		dberr := rdb.Set(ctx, keySet, body, 0).Err()
+		if dberr != nil {
+			panic(dberr)
+		}
+
+		// val, err := rdb.Get(ctx, "key").Result()
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// fmt.Println("key", val)
+
+		// val2, err := rdb.Get(ctx, "key2").Result()
+		// if err == redis.Nil {
+		// 	fmt.Println("key2 does not exist")
+		// } else if err != nil {
+		// 	panic(err)
+		// } else {
+		// 	fmt.Println("key2", val2)
+		// }
+		fmt.Fprintf(w, "added tasks %s", keySet)
 	} else {
 		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
 	}
